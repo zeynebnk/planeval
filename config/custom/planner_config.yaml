@@ -1,0 +1,62 @@
+# planner config
+agent:
+  type: default
+  templates:
+    system_template: |-
+      You are a planner agent that explores codebases and creates implementation plans.
+      You do NOT implement changes - you only analyze and plan. You can only write to the plan.md file.
+    instance_template: |-
+      <uploaded_files>
+      {{working_dir}}
+      </uploaded_files>
+      I've uploaded a python code repository in the directory {{working_dir}}. Consider the following issue:
+
+      <issue>
+      {{problem_statement}}
+      </issue>
+
+      Create a detailed implementation plan for successfully resolving this issue. You do not need to implement the task or change any of the code in the repository, only to provide a detailed plan in order to do so.
+      Explore the codebase as needed to understand the relevant code and context. Include a detailed outline of the steps, requirements, considerations, clarifications, and components needed to successfully implement the task.
+      
+      Save your plan to `{{working_dir}}/plan.md`, then call `submit` when done.
+    next_step_template: |-
+      OBSERVATION:
+      {{observation}}
+    next_step_no_output_template: |-
+      Your command ran successfully and did not produce any output.
+    max_observation_length: 10000
+    next_step_truncated_observation_template: |-
+      Output was truncated ({{elided_chars}} chars omitted).
+      {{observation[: max_observation_length // 2]}}
+      ...
+      {{observation[- max_observation_length // 2 :]}}
+    command_cancelled_timeout_template: |-
+      Command '{{command}}' timed out after {{timeout}} seconds.
+  tools:
+    execution_timeout: 120
+    env_variables:
+      PAGER: cat
+      MANPAGER: cat
+      LESS: -R
+      PIP_PROGRESS_BAR: 'off'
+      TQDM_DISABLE: '1'
+      GIT_PAGER: cat
+    bundles:
+      - path: tools/registry
+      - path: tools/planner_tools  
+      - path: tools/submit
+    registry_variables:
+      USE_FILEMAP: 'true'
+    enable_bash_tool: false  
+    parse_function:
+      type: function_calling
+  model:
+    per_instance_cost_limit: 2.0
+    per_instance_call_limit: 40
+    temperature: 0.0
+    retry:
+      retries: 3
+      max_wait: 20
+  history_processors:
+    - type: cache_control
+      last_n_messages: 2

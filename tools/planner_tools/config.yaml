@@ -1,0 +1,34 @@
+tools:
+  planner_editor:
+    signature: |
+      planner_editor <command> <path> [<view_range>] [<plan_content>]
+    docstring: >
+      Custom editor for planning - can only view files and write to plan.md
+      * If `path` is a file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep
+      * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
+      * The `write_plan` command writes your implementation plan to /testbed/plan.md. The `path` parameter is ignored for this command.
+      * This tool can ONLY write to /testbed/plan.md. It cannot create or modify any other files.
+    arguments:
+      - name: command
+        type: string
+        description: "The command to run. Allowed options are: `view`, `write_plan`."
+        required: true
+        enum: ["view", "write_plan"]
+      - name: path
+        type: string
+        description: "Absolute path to file or directory, e.g. `/testbed/file.py` or `/testbed`. Required for `view`. For `write_plan`, use `/testbed` as placeholder."
+        required: false
+        default: "/testbed"
+      - name: view_range
+        type: array
+        items:
+          type: integer
+        description: "Optional parameter of `view` command when `path` points to a file. If none is given, the full file is shown. If provided, the file will be shown in the indicated line number range, e.g. [11, 12] will show lines 11 and 12. Indexing at 1 to start. Setting `[start_line, -1]` shows all lines from `start_line` to the end of the file."
+        required: false
+        argument_format: "--view_range {{value|join(' ')}}"
+      - name: plan_content
+        type: string
+        description: "Required parameter of `write_plan` command, containing the full plan content to write to /testbed/plan.md."
+        required: false
+        argument_format: "--plan_content {{value}}"
+state_command: "_state_planner"
