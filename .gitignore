@@ -207,4 +207,24 @@ website/frontend/build
 # SWE-smith
 agent_conf
 sb-cli-reports/
-trajectories_sft/
+trajectories_sft/_planner_evaluator/arxiv/
+_planner_evaluator/results/
+_planner_evaluator/coder_results/
+_planner_evaluator/eval_results/
+_planner_evaluator/logs/
+trajectories/
+trajectories_coder/
+__pycache__/
+*.pyc
+logs/
+.env
+_planner_evaluator/arxiv/
+_planner_evaluator/results/
+_planner_evaluator/coder_results/
+_planner_evaluator/eval_results/
+_planner_evaluator/logs/
+trajectories/
+trajectories_coder/
+__pycache__/
+*.pyc
+logs/

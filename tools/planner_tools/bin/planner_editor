@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+
+"""
+Restricted editor for planner agent - based on Anthropic's str_replace_editor.
+Only allows: view (any file) and write_plan (only /testbed/plan.md)
+"""
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+from typing import List, Optional
+import io
+
+# Handle encoding issues
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+
+TRUNCATED_MESSAGE: str = "<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>"
+MAX_RESPONSE_LEN: int = 16000
+PLAN_PATH = Path("/testbed/plan.md")
+
+
+def maybe_truncate(content: str, truncate_after: Optional[int] = MAX_RESPONSE_LEN):
+    """Truncate content and append a notice if content exceeds the specified length."""
+    return (
+        content
+        if not truncate_after or len(content) <= truncate_after
+        else content[:truncate_after] + TRUNCATED_MESSAGE
+    )
+
+
+class PlannerEditor:
+    """
+    A restricted editor that only allows viewing files and writing to plan.md.
+    """
+
+    name = "planner_editor"
+
+    def __init__(self):
+        self._encoding = None
+
+    def __call__(
+        self,
+        *,
+        command: str,
+        path: str,
+        view_range: Optional[List[int]] = None,
+        plan_content: Optional[str] = None,
+    ):
+        _path = Path(path)
+        
+        if command == "view":
+            self.validate_path_for_view(_path)
+            return self.view(_path, view_range)
+        elif command == "write_plan":
+            if plan_content is None:
+                print("Parameter `plan_content` is required for command: write_plan")
+                sys.exit(1)
+            return self.write_plan(plan_content)
+        else:
+            print(f'Unrecognized command {command}. The allowed commands for the {self.name} tool are: "view", "write_plan"')
+            sys.exit(2)
+
+    def validate_path_for_view(self, path: Path):
+        """Check that the path is valid for viewing."""
+        if not path.is_absolute():
+            suggested_path = Path.cwd() / path
+            print(f"The path {path} is not an absolute path, it should start with `/`. Maybe you meant {suggested_path}?")
+            sys.exit(3)
+        if not path.exists():
+            print(f"The path {path} does not exist. Please provide a valid path.")
+            sys.exit(4)
+
+    def view(self, path: Path, view_range: Optional[List[int]] = None):
+        """Implement the view command."""
+        if path.is_dir():
+            if view_range:
+                print("The `view_range` parameter is not allowed when `path` points to a directory.")
+                sys.exit(5)
+            out = subprocess.run(
+                rf"find {path} -maxdepth 2 -not -path '*/\.*'",
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            stdout = out.stdout.decode()
+            stderr = out.stderr.decode()
+            if not stderr:
+                stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
+                print(stdout)
+            return
+
+        file_content = self.read_file(path)
+        init_line = 1
+
+        if view_range:
+            if len(view_range) != 2 or not all(isinstance(i, int) for i in view_range):
+                print("Invalid `view_range`. It should be a list of two integers.")
+                sys.exit(6)
+            file_lines = file_content.split("\n")
+            n_lines_file = len(file_lines)
+            init_line, final_line = view_range
+            
+            if init_line < 1 or init_line > n_lines_file:
+                print(f"Invalid `view_range`: {view_range}. Its first element `{init_line}` should be within the range of lines of the file: {[1, n_lines_file]}")
+                sys.exit(7)
+            if final_line > n_lines_file:
+                print(f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be smaller than the number of lines in the file: `{n_lines_file}`")
+                sys.exit(8)
+            if final_line != -1 and final_line < init_line:
+                print(f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be larger or equal than its first `{init_line}`")
+                sys.exit(9)
+            if final_line == -1:
+                final_line = n_lines_file
+            
+            file_content = "\n".join(file_lines[init_line - 1:final_line])
+
+        print(self._make_output(file_content, str(path), init_line=init_line))
+
+    def write_plan(self, content: str):
+        """Write content to /testbed/plan.md - the ONLY file this tool can write to."""
+        try:
+            PLAN_PATH.parent.mkdir(parents=True, exist_ok=True)
+            PLAN_PATH.write_text(content, encoding="utf-8")
+            print(f"Plan successfully written to: {PLAN_PATH}")
+        except Exception as e:
+            print(f"Error writing plan: {e}")
+            sys.exit(10)
+
+    def read_file(self, path: Path) -> str:
+        """Read file content with encoding fallbacks."""
+        encodings = [
+            (None, None),
+            ("utf-8", None),
+            ("latin-1", None),
+            ("utf-8", "replace"),
+        ]
+        exception = None
+        for self._encoding, errors in encodings:
+            try:
+                return path.read_text(encoding=self._encoding, errors=errors)
+            except UnicodeDecodeError as e:
+                exception = e
+                continue
+        print(f"Ran into UnicodeDecodeError {exception} while trying to read {path}")
+        sys.exit(11)
+
+    def _make_output(self, file_content: str, file_descriptor: str, init_line: int = 1):
+        """Generate output for the CLI based on the content of a file."""
+        file_content = maybe_truncate(file_content)
+        file_content = file_content.expandtabs()
+        file_content = "\n".join([f"{i + init_line:6}\t{line}" for i, line in enumerate(file_content.split("\n"))])
+        return f"Here's the result of running `cat -n` on {file_descriptor}:\n{file_content}\n"
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", type=str)
+    parser.add_argument("path", type=str, nargs="?", default="/testbed")
+    parser.add_argument("--view_range", type=int, nargs=2)
+    parser.add_argument("--plan_content", type=str)
+    args = parser.parse_args()
+    
+    tool = PlannerEditor()
+    tool(
+        command=args.command,
+        path=args.path,
+        view_range=args.view_range,
+        plan_content=args.plan_content,
+    )
+
+
+if __name__ == "__main__":
+    main()

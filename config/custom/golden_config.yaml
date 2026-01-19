@@ -1,0 +1,102 @@
+# Golden planner config - for creating high-quality ground truth plans
+agent:
+  type: default
+  templates:
+    system_template: |-
+      You are an expert planner agent that creates gold-standard implementation plans.
+      You do NOT implement changes - you only analyze codebases and create detailed, comprehensive plans.
+      Your plans will be used as ground truth references, so they must be thorough, accurate, and well-structured.
+      Take your time to explore the codebase deeply before writing your plan.
+    instance_template: |-
+      <uploaded_files>
+      {{working_dir}}
+      </uploaded_files>
+      I've uploaded a python code repository in the directory {{working_dir}}. Consider the following issue:
+
+      <issue>
+      {{problem_statement}}
+      </issue>
+
+      Create a comprehensive, high-quality implementation plan that could serve as a gold-standard reference. You do NOT implement changes - only analyze and plan. Explore the codebase thoroughly before writing your plan.
+
+      You may discuss areas such as:
+
+      Problem statement and analysis:  
+      - Restate the problem in your own words
+      - Identify the root cause of the bug or the core requirement
+      - Explain why the current behavior is incorrect (for bugs) or what's missing (for features)
+
+      Relevant Code Locations:
+      - List the specific files and functions that need to be modified
+      - Include line numbers or ranges where changes are needed
+      - Explain the role of each file/function in the issue
+
+      Solution Design:
+      - Describe the high-level approach to fix the issue
+      - Explain the logic/algorithm changes required
+      - Discuss any design decisions and their rationale
+      - Discuss how the solution fits into the codebase and how it will be integrated
+
+      Implementation Steps:
+      - Provide numbered, atomic steps to implement the fix
+      - Each step should be specific and actionable
+      - Include the exact changes needed (what to add/modify/remove)
+      - Any detailed considerations and clarifications that are needed to implement the solution
+
+      Testing Strategy:
+      - Describe how to verify the fix works
+      - Include specific test cases that should pass after the fix
+      - Mention any edge cases to consider
+
+      Potential Risks, Compatibility Issues, and Edge Cases:
+      - Identify any backwards compatibility concerns
+      - Note potential side effects or regressions
+      - Mention any assumptions made
+      - Any further considerations and key topics to discuss
+
+      Other:
+      - Any other details, relevant additional info, context, and holistic considerations that may be useful in the implementation or improvements and future steps
+      - Expert knowledge and insights as a software engineer
+
+      Save your plan to `{{working_dir}}/plan.md`, then call `submit` when done.
+    next_step_template: |-
+      OBSERVATION:
+      {{observation}}
+    next_step_no_output_template: |-
+      Your command ran successfully and did not produce any output.
+    max_observation_length: 10000
+    next_step_truncated_observation_template: |-
+      Output was truncated ({{elided_chars}} chars omitted).
+      {{observation[: max_observation_length // 2]}}
+      ...
+      {{observation[- max_observation_length // 2 :]}}
+    command_cancelled_timeout_template: |-
+      Command '{{command}}' timed out after {{timeout}} seconds.
+  tools:
+    execution_timeout: 120
+    env_variables:
+      PAGER: cat
+      MANPAGER: cat
+      LESS: -R
+      PIP_PROGRESS_BAR: 'off'
+      TQDM_DISABLE: '1'
+      GIT_PAGER: cat
+    bundles:
+      - path: tools/registry
+      - path: tools/planner_tools  
+      - path: tools/submit
+    registry_variables:
+      USE_FILEMAP: 'true'
+    enable_bash_tool: false  # Disabled: prevents editing via bash
+    parse_function:
+      type: function_calling
+  model:
+    per_instance_cost_limit: 3.0
+    per_instance_call_limit: 50
+    temperature: 0.0
+    retry:
+      retries: 3
+      max_wait: 20
+  history_processors:
+    - type: cache_control
+      last_n_messages: 2
